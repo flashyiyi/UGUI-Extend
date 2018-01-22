@@ -1,10 +1,10 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.Callbacks;
 #endif
-
 namespace UGUIExtend
 {
     /// <summary>
@@ -14,40 +14,170 @@ namespace UGUIExtend
     public class PrefabLoader : MonoBehaviour
     {
 #if UNITY_EDITOR
-        static Transform previewContainer;
-        static void FindPreviewContainer()
-        {
-            if (previewContainer != null)
-                return;
 
-            Canvas canvas = GameObject.FindObjectOfType<Canvas>();
-            if (canvas != null)
+        [MenuItem("Tools/Apply All Canvas Prefab")]
+        public static void ApplyAllCanvasPrefab()
+        {
+            Canvas[] canvases = GameObject.FindObjectsOfType<Canvas>();
+            foreach (Canvas canvas in canvases)
             {
-                Transform root = canvas.rootCanvas.transform;
-                previewContainer = root.Find("_PrefabPreview");
-                if (previewContainer == null)
+                ApplyAllPrefab(canvas.transform);
+            }
+        }
+
+        static void ApplyAllPrefab(Transform root)
+        {
+            int count = root.childCount;
+            for (int i = 0; i < count; i++)
+            {
+                Transform trans = root.GetChild(i);
+                ApplyAllPrefab(trans);
+                PrefabLoader loader = trans.GetComponent<PrefabLoader>();
+                if (loader != null && loader.mChild != null)
                 {
-                    previewContainer = new GameObject("_PrefabPreview").transform;
-                    previewContainer.SetParent(root.transform, false);
+                    GameObject loaderGo = loader.mChild.gameObject;
+                    Object childPrefab = PrefabUtility.GetPrefabParent(loaderGo);
+                    if (childPrefab != null)
+                    {
+                        PrefabUtility.ReplacePrefab(loaderGo, childPrefab, ReplacePrefabOptions.ConnectToPrefab);
+                    }
                 }
             }
         }
 
-        [PostProcessSceneAttribute(2)]
-        public static void OnPostprocessScene()
+        [InitializeOnLoadMethod]
+        static void StartInitializeOnLoadMethod()
         {
-            Canvas canvas = GameObject.FindObjectOfType<Canvas>();
-            if (canvas != null)
+            PrefabUtility.prefabInstanceUpdated += RemoveAllTempPrefab;
+            SceneView.onSceneGUIDelegate += OnSceneGUI;
+        }
+
+        static bool isDraging;
+        static void OnSceneGUI(SceneView sceneview)
+        {
+            Event e = Event.current;
+            if (!isDraging && e.type == EventType.MouseDrag)
             {
-                Transform root = canvas.rootCanvas.transform;
-                Transform previewContainer = root.Find("_PrefabPreview");
-                if (previewContainer != null)
+                isDraging = true;
+            }
+            if (isDraging && e.type == EventType.mouseUp)
+            {
+                isDraging = false;
+            }
+        }
+
+        static void FindPrefabLoader(Transform root, ref List<PrefabLoader> loaders)
+        {
+            int count = root.childCount;
+            for (int i = 0; i < count; i++)
+            {
+                Transform trans = root.GetChild(i);
+                PrefabLoader loader = trans.GetComponent<PrefabLoader>();
+                if (loader != null)
                 {
-                    GameObject.Destroy(previewContainer.gameObject);
+                    if (loader.transform.childCount > 0)
+                        loaders.Add(loader);
+                }
+                else
+                {
+                    FindPrefabLoader(trans, ref loaders);
+                }
+            }
+        }
+
+        static void RemoveAllTempPrefab(GameObject go)
+        {
+            List<PrefabLoader> loaders = new List<PrefabLoader>();
+            FindPrefabLoader(go.transform, ref loaders);
+
+            if (loaders.Count > 0)
+            {
+                //foreach (PrefabLoader loader in loaders)
+                //{
+                //    GameObject loaderGo = loader.mChild != null ? loader.mChild.gameObject : null;
+                //    if (loaderGo != null && PrefabUtility.GetPrefabType(loaderGo) == PrefabType.PrefabInstance)
+                //    {
+                //        Object childPrefab = PrefabUtility.GetPrefabParent(go);
+                //        PrefabUtility.ReplacePrefab(loaderGo, childPrefab, ReplacePrefabOptions.ConnectToPrefab);
+                //    }
+                //}
+                foreach (PrefabLoader loader in loaders)
+                {
+                    if (loader != null)
+                    {
+                        RemoveAllChildren(loader.transform);
+                    }
+                }
+                loaders = null;
+
+                Object prefab = PrefabUtility.GetPrefabParent(go);
+                PrefabUtility.ReplacePrefab(go, prefab, ReplacePrefabOptions.ConnectToPrefab);
+
+                EditorApplication.CallbackFunction oldCallBack = EditorApplication.delayCall;
+                EditorApplication.delayCall = () =>
+                {
+                    Selection.activeGameObject = go;
+                    if (oldCallBack != null)
+                        oldCallBack.Invoke();
+                };
+            }
+        }
+
+        void Update()
+        {
+            if (!Application.isPlaying)
+            {
+                if (source != null)
+                {
+                    Object selfPrefab = PrefabUtility.GetPrefabParent(PrefabUtility.FindPrefabRoot(gameObject));
+                    if (selfPrefab == source)
+                    {
+                        source = null;
+                        return;
+                    }
+
+                    if (mChild == null || PrefabUtility.GetPrefabParent(mChild.gameObject) != source)
+                    {
+                        RemoveAllChildren(transform);
+                        mChild = null;
+                        GameObject prefab = PrefabUtility.InstantiatePrefab(source) as GameObject;
+                        if (prefab != null)
+                        {
+                            mChild = prefab.transform;
+                            mChild.SetParent(transform, false);
+                            mChild.localPosition = Vector3.zero;
+                        }
+                    }
+
+                    if (!isDraging && mChild != null)
+                    {
+                        transform.position = mChild.position;
+                        mChild.localPosition = Vector3.zero;
+                    }
+                }
+                else
+                {
+                    if (mChild != null)
+                    {
+                        RemoveAllChildren(transform);
+                        mChild = null;
+                    }
                 }
             }
         }
 #endif
+
+        public static void RemoveAllChildren(Transform trans)
+        {
+            int count = trans.childCount;
+            for (int i = count - 1; i >= 0; i--)
+            {
+                if (Application.isPlaying)
+                    GameObject.Destroy(trans.GetChild(i).gameObject);
+                else
+                    GameObject.DestroyImmediate(trans.GetChild(i).gameObject);
+            }
+        }
 
         // Prefab
         [SerializeField]
@@ -57,10 +187,6 @@ namespace UGUIExtend
         [SerializeField]
         public bool autoLoad = true;
 
-        // 是将预览预制的坐标复制到瞄点，还是相反。这是为了方便拖动。
-        [SerializeField]
-        public bool copyPositionFromPreview = false;
-
         Transform mChild;
 
         void Awake()
@@ -69,90 +195,29 @@ namespace UGUIExtend
             {
                 Load();
             }
-
-#if UNITY_EDITOR
-            if (!Application.isPlaying)
-            {
-                if (mChild == null)
-                {
-                    FindPreviewContainer();
-                    if (previewContainer != null)
-                    {
-                        mChild = previewContainer.Find(source.name + GetInstanceID().ToString());
-                    }
-                }
-            }
-#endif
         }
 
         public void Load()
         {
             if (source != null)
             {
-                if (mChild != null)
-                {
-                    GameObject.Destroy(mChild.gameObject);
-                }
+                RemoveAllChildren(transform);
+
                 mChild = GameObject.Instantiate(source).transform;
                 mChild.name = source.name;
-                mChild.SetParent(this.transform, false);
+                mChild.SetParent(transform, false);
                 mChild.localPosition = Vector3.zero;
             }
         }
-
-#if UNITY_EDITOR
-        void Update()
-        {
-            if (!Application.isPlaying)
-            {
-                if (source != null)
-                {
-                    if (mChild == null || PrefabUtility.GetPrefabParent(mChild.gameObject) != source)
-                    {
-                        FindPreviewContainer();
-                        if (previewContainer != null)
-                        {
-                            if (mChild != null)
-                            {
-                                GameObject.DestroyImmediate(mChild.gameObject);
-                                mChild = null;
-                            }
-                            GameObject prefab = PrefabUtility.InstantiatePrefab(source) as GameObject;
-                            if (prefab != null)
-                            {
-                                prefab.name = source.name + GetInstanceID().ToString();
-                                mChild = prefab.transform;
-                                mChild.SetParent(previewContainer, false);
-                                mChild.position = this.transform.position;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (copyPositionFromPreview)
-                            this.transform.position = mChild.position;
-                        else
-                            mChild.position = this.transform.position;
-                    }
-                }
-                else
-                {
-                    if (mChild != null)
-                    {
-                        GameObject.DestroyImmediate(mChild.gameObject);
-                        mChild = null;
-                    }
-                }
-                if (previewContainer != null)
-                {
-                    if (previewContainer.GetSiblingIndex() < previewContainer.parent.childCount - 1)
-                    {
-                        previewContainer.SetAsLastSibling();
-                    }
-                }
-            }
-        }
-#endif
-
     }
+
+
+    //public class RespectReadOnly : UnityEditor.AssetModificationProcessor
+    //{
+    //    public static string[] OnWillSaveAssets(string[] paths)
+    //    {
+    //        PrefabLoader.ApplyAllCanvasPrefab();
+    //        return paths;
+    //    }
+    //}
 }
