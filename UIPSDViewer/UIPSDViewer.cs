@@ -249,6 +249,20 @@ public class UIPSDViewer : MonoBehaviour
             }
         }
     }
+    [UnityEditor.MenuItem("GameObject/UI/Create Text By Name", false)]
+    public static void CreateTextByName()
+    {
+        GameObject[] gameObjects = UnityEditor.Selection.gameObjects;
+        foreach (GameObject go in gameObjects)
+        {
+            Graphic g = go.GetComponent<Graphic>();
+            if (g != null)
+                GameObject.DestroyImmediate(g);
+            Text t = go.AddComponent<Text>();
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.text = go.name;
+        }
+    }
 
 #endif
 }
