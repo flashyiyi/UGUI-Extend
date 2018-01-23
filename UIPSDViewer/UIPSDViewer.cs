@@ -71,10 +71,13 @@ public class UIPSDViewer : MonoBehaviour
             sprites = null;
         }
 
-        int count = rectTransform.childCount;
-        for (int i = count - 1; i >= 0; i--)
+        if (rectTransform != null)
         {
-            GameObject.DestroyImmediate(rectTransform.GetChild(i).gameObject);
+            int count = rectTransform.childCount;
+            for (int i = count - 1; i >= 0; i--)
+            {
+                GameObject.DestroyImmediate(rectTransform.GetChild(i).gameObject);
+            }
         }
     }
 
@@ -180,6 +183,9 @@ public class UIPSDViewer : MonoBehaviour
 #if UNITY_EDITOR
     private void OnValidate()
     {
+        if (!gameObject.activeInHierarchy)
+            return;
+
         UnityEditor.EditorApplication.delayCall += () =>
         {
             LoadDocument();
