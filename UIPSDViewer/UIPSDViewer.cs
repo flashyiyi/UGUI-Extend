@@ -15,6 +15,7 @@ public class UIPSDViewer : MonoBehaviour
 
     public bool createTexture = true;
     public bool drawGimzos = true;
+    public bool replaceByName = false;
 
     void Awake()
     {
@@ -104,11 +105,25 @@ public class UIPSDViewer : MonoBehaviour
 
             if (layer.HasImage && createTexture)
             {
-                Texture2D tex = GetTexture2D(layer);
                 Image image = t.gameObject.AddComponent<Image>();
-                Sprite sprite = Sprite.Create(tex, new Rect(0, 0, layer.Width, layer.Height), Vector2.zero);
+                Sprite sprite = null;
+#if UNITY_EDITOR
+                if (replaceByName)
+                {
+                    string[] findedSprites = UnityEditor.AssetDatabase.FindAssets(layer.Name + " t:sprite");
+                    if (findedSprites.Length > 0)
+                    {
+                        sprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(UnityEditor.AssetDatabase.GUIDToAssetPath(findedSprites[0]));
+                    }
+                }
+#endif
+                if (sprite == null)
+                {
+                    Texture2D tex = GetTexture2D(layer);
+                    sprite = Sprite.Create(tex, new Rect(0, 0, layer.Width, layer.Height), Vector2.zero);
+                    sprites.Add(sprite);
+                }
                 image.sprite = sprite;
-                sprites.Add(sprite);
             }
 
             CreateLayers(t,layer.Childs);
@@ -185,7 +200,7 @@ public class UIPSDViewer : MonoBehaviour
     {
         if (!gameObject.activeInHierarchy)
             return;
-
+        
         UnityEditor.EditorApplication.delayCall += () =>
         {
             LoadDocument();
