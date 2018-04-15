@@ -1,27 +1,43 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
+using UnityEngine.UI;
 using System;
-using System.Runtime.InteropServices;
+using System.Reflection;
 
-namespace UnityEngine.UI
+namespace UGUIExtend
 {
+    public sealed class UIAttribute : Attribute
+    {
+        public string name;
+        public int index = -1;
+        public bool warn = true;
+
+        public bool findByName;
+        public bool findInactive;
+
+        public UIAttribute(string name = null)
+        {
+            this.name = name;
+        }
+    }
+
     [ExecuteInEditMode]
     public class UIPackage : MonoBehaviour, ISerializationCallbackReceiver
     {
         [SerializeField]
-        private List<string> names;
+        List<string> names;
 
         [SerializeField]
-        private List<Component> components;
+        List<Component> components;
+
+        [SerializeField]
+        public List<Component> customComponents;
 
         [NonSerialized]
         public Dictionary<string, object> objects;
- 
 
+        #region Get Method
         public T Get<T>(string name) where T : Component
         {
             return Get(name, typeof(T)) as T;
@@ -32,7 +48,7 @@ namespace UnityEngine.UI
             return GetAll(name, typeof(T)) as List<T>;
         }
 
-        Component Get(string name, Type type = null)
+        public Component Get(string name, Type type = null)
         {
             object result = RawGet(name, type);
             if (result is Component[])
@@ -41,7 +57,7 @@ namespace UnityEngine.UI
                 return result as Component;
         }
 
-        List<Component> GetAll(string name, Type type)
+        public List<Component> GetAll(string name, Type type)
         {
             object result = RawGet(name, type);
             if (result is List<Component>)
@@ -50,6 +66,14 @@ namespace UnityEngine.UI
                 return new List<Component> { result as Component };
             else
                 return null;
+        }
+
+        public object this[string name]
+        {
+            get
+            {
+                return Get(name);
+            }
         }
 
         object RawGet(string name, Type type = null)
@@ -83,19 +107,53 @@ namespace UnityEngine.UI
             return null;
         }
 
-        public object this[string name]
+        /// <summary>
+        /// 不通过缓存直接查找组件
+        /// </summary>
+        /// <param name="includeInactive">是否查找禁用状态的组件</param>
+        /// <returns></returns>
+        public Component FindByPath(string name, Type type, bool includeInactive = false)
         {
-            get
+            string[] parts = name.Split('/');
+            Transform cur = transform;
+            foreach (string part in parts)
             {
-                return Get(name);
+                cur = FindByName(cur, part, includeInactive);
+                if (cur == null)
+                    return null;
+            }
+            return cur.GetComponent(type);
+        }
+        public T FindByPath<T>(string name, bool includeInactive = false) where T : Component
+        {
+            return FindByPath(name, typeof(T), includeInactive) as T;
+        }
+
+        Transform FindByName(Transform trans, string name, bool includeactive = false)
+        {
+            if (!includeactive)
+            {
+                return trans.Find(name);
+            }
+            else
+            {
+                int c = trans.childCount;
+                for (int i = 0; i < c; i++)
+                {
+                    Transform child = trans.GetChild(i);
+                    if (child.name == name)
+                        return child;
+                }
+                return null;
             }
         }
 
+        #endregion
+        #region Serialize
         void ISerializationCallbackReceiver.OnBeforeSerialize()
         {
             names = new List<string>();
             components = new List<Component>();
-
             if (objects == null)
                 return;
 
@@ -144,8 +202,59 @@ namespace UnityEngine.UI
                 AddData(name, component);
             }
         }
-        
-        void AddData(string name,Component component)
+        #endregion
+        #region Create Datas
+        HashSet<Component> customComponentSet;
+
+        /// <summary>
+        /// 临时创建时可以用此方法手动初始化数据
+        /// </summary>
+        public void RefreshDatas()
+        {
+            if (objects == null)
+                objects = new Dictionary<string, object>();
+            else
+                objects.Clear();
+
+            customComponentSet = new HashSet<Component>(customComponents);
+
+            foreach (var item in customComponents)
+            {
+                AddData(item.name, item);
+            }
+            AddDataFromChildren(transform);
+        }
+
+        void AddDataFromChildren(Transform trans)
+        {
+            foreach (var item in trans.GetComponents<Button>())
+            {
+                if (!customComponentSet.Contains(item))
+                    AddData(item.name, item);
+            }
+            foreach (var item in trans.GetComponents<Text>())
+            {
+                if (!customComponentSet.Contains(item))
+                    AddData(item.name, item);
+            }
+
+            int count = trans.childCount;
+            for (int i = 0; i < count; i++)
+            {
+                Transform child = trans.GetChild(i);
+                UIPackage pack = child.GetComponent<UIPackage>();
+                if (pack != null)
+                {
+                    AddData(pack.name, pack);
+                }
+                else
+                {
+                    AddDataFromChildren(child);
+                }
+            }
+        }
+
+        void AddData(string name, Component component)
         {
             if (!objects.ContainsKey(name))
             {
@@ -188,65 +297,93 @@ namespace UnityEngine.UI
             }
         }
 
-        public void GetData()
+#if UNITY_EDITOR
+        //确保RefreshDatas在保存时可以被执行
+        [UnityEditor.InitializeOnLoadMethod]
+        static void StartInitializeOnLoadMethod()
         {
-            if (objects == null)
-                objects = new Dictionary<string, object>();
-            else
-                objects.Clear();
-
-            GetDataFromChildren(transform);
+            UnityEditor.PrefabUtility.prefabInstanceUpdated += ApplyHandler;
         }
 
-        void GetDataFromChildren(Transform trans)
+        static void ApplyHandler(GameObject go)
         {
-            foreach (var item in trans.GetComponents<Button>())
-            {
-                AddData(item.name,item);
-            }
-            foreach (var item in trans.GetComponents<Text>())
-            {
-                AddData(item.name, item);
-            }
+            UIPackage pack = go.GetComponent<UIPackage>();
+            if (pack != null)
+                pack.RefreshDatas();
+        }
+#endif
+        #endregion
+        #region Inject
 
-            int count = trans.childCount;
-            for (int i = 0;i < count;i++)
+        /// <summary>
+        /// 根据UIAttribute自动注入UI控件的依赖
+        /// </summary>
+        public void InjectAll(object target)
+        {
+            Type T = target.GetType();
+            foreach (FieldInfo fi in T.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
             {
-                Transform child = trans.GetChild(i);
-                UIPackage pack = child.GetComponent<UIPackage>();
-                if (pack != null)
+                object value = GetUI(fi);
+                if (value != null)
                 {
-                    AddData(pack.name, pack);
+                    fi.SetValue(target, value);
+                }
+            }
+            foreach (MethodInfo fi in T.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            {
+                object value = GetUI(fi);
+                if (value is Button)
+                {
+                    UnityEngine.Events.UnityAction fun = Delegate.CreateDelegate(typeof(UnityEngine.Events.UnityAction), target, fi) as UnityEngine.Events.UnityAction;
+                    (value as Button).onClick.AddListener(fun);
+                }
+            }
+        }
+
+        object GetUI(MemberInfo info)
+        {
+            object result = null;
+            object[] attrs = info.GetCustomAttributes(typeof(UIAttribute), false);
+            if (attrs != null && attrs.Length > 0)
+            {
+                UIAttribute attr = attrs[0] as UIAttribute;
+                if (attr.findByName)
+                {
+                    result = FindByPath(attr.name, info.DeclaringType, attr.findInactive);
                 }
                 else
                 {
-                    GetDataFromChildren(child);
+                    string name = attr.name != null ? attr.name : info.Name;
+                    if (info.DeclaringType is IEnumerable)
+                    {
+                        result = GetAll(name, GetGenericType(info.DeclaringType));
+                    }
+                    else if (attr.index != -1)
+                    {
+                        List<Component> components = GetAll(name, GetGenericType(info.DeclaringType));
+                        result = attr.index < components.Count ? components[attr.index] : null;
+                    }
+                    else
+                    {
+                        result = Get(name, info.DeclaringType);
+                    }
+                }
+
+                if (result == null && attr.warn)
+                {
+                    Debug.LogWarning(this.name + "/" + name + " No Find!");
                 }
             }
+            return result;
         }
 
-
-#if UNITY_EDITOR
-        void Update()
+        Type GetGenericType(Type t)
         {
-            if (!Application.isPlaying)
-            {
-                GetData();
-                EditorUtility.SetDirty(this);
-            }
+            Type[] types = t.GetGenericArguments();
+            return types != null && types.Length > 0 ? types[0] : null;
         }
-#endif
-    }
 
-    [AttributeUsage(AttributeTargets.Field, Inherited = false)]
-    [ComVisible(true)]
-    public sealed class UIProperty : Attribute
-    {
-        public string Name { get; private set; }
-        public UIProperty(string name = null)
-        {
-            Name = name;
-        }
+        #endregion
     }
 }
 

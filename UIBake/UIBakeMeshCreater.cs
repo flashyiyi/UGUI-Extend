@@ -16,6 +16,7 @@ namespace UGUIExtend
             base.OnEnable();
             if (Application.isPlaying)
                 BatchAll();
+            
         }
 
         protected override void UpdateGeometry()

@@ -29,7 +29,6 @@ namespace UGUIExtend
                     }
                     return s_WhiteTexture;
                 }
-
                 return asset.sprite.texture;
             }
         }
