@@ -7,32 +7,17 @@ using System.Reflection;
 
 namespace UGUIExtend
 {
-    public sealed class UIAttribute : Attribute
-    {
-        public string name;
-        public int index = -1;
-        public bool warn = true;
-
-        public bool findByName;
-        public bool findInactive;
-
-        public UIAttribute(string name = null)
-        {
-            this.name = name;
-        }
-    }
-
     [ExecuteInEditMode]
     public class UIPackage : MonoBehaviour, ISerializationCallbackReceiver
     {
         [SerializeField]
-        List<string> names;
+        string[] names;
 
         [SerializeField]
-        List<Component> components;
+        Component[] components;
 
         [SerializeField]
-        public List<Component> customComponents;
+        public List<Component> customComponents = new List<Component>();
 
         [NonSerialized]
         public Dictionary<string, object> objects;
@@ -43,9 +28,9 @@ namespace UGUIExtend
             return Get(name, typeof(T)) as T;
         }
 
-        public List<T> GetAll<T>(string name) where T : Component
+        public T[] GetAll<T>(string name) where T : Component
         {
-            return GetAll(name, typeof(T)) as List<T>;
+            return GetAll(name, typeof(T)) as T[];
         }
 
         public Component Get(string name, Type type = null)
@@ -57,13 +42,13 @@ namespace UGUIExtend
                 return result as Component;
         }
 
-        public List<Component> GetAll(string name, Type type)
+        public Component[] GetAll(string name, Type type)
         {
             object result = RawGet(name, type);
-            if (result is List<Component>)
-                return result as List<Component>;
+            if (result is Component[])
+                return result as Component[];
             else if (result is Component)
-                return new List<Component> { result as Component };
+                return new Component[1] { result as Component };
             else
                 return null;
         }
@@ -152,13 +137,17 @@ namespace UGUIExtend
         #region Serialize
         void ISerializationCallbackReceiver.OnBeforeSerialize()
         {
-            names = new List<string>();
-            components = new List<Component>();
             if (objects == null)
                 return;
 
+            var names = new List<string>();
+            var components = new List<Component>();
+
             foreach (var pair in objects)
             {
+                if (pair.Value == null)
+                    continue;
+
                 if (pair.Value is Component)
                 {
                     names.Add(pair.Key);
@@ -171,15 +160,21 @@ namespace UGUIExtend
                     {
                         foreach (var pair2 in typeObj)
                         {
+                            if (pair2.Value == null)
+                                continue;
+
                             if (pair2.Value is Component)
                             {
                                 names.Add(pair.Key);
                                 components.Add(pair2.Value as Component);
                             }
-                            else if (pair2.Value is List<Component>)
+                            else if (pair2.Value is Component[])
                             {
-                                foreach (Component item in pair2.Value as List<Component>)
+                                foreach (Component item in pair2.Value as Component[])
                                 {
+                                    if (item == null)
+                                        continue;
+
                                     names.Add(pair.Key);
                                     components.Add(item);
                                 }
@@ -188,13 +183,14 @@ namespace UGUIExtend
                     }
                 }
             }
+            this.names = names.ToArray();
+            this.components = components.ToArray();
         }
 
         void ISerializationCallbackReceiver.OnAfterDeserialize()
         {
-            List<Vector3> v = new List<Vector3>();
             objects = new Dictionary<string, object>();
-            int count = names.Count;
+            int count = names.Length;
             for (int i = 0; i < count; i++)
             {
                 string name = names[i];
@@ -216,13 +212,25 @@ namespace UGUIExtend
             else
                 objects.Clear();
 
-            customComponentSet = new HashSet<Component>(customComponents);
+            ChangeGameObjectName();
 
+            customComponentSet = new HashSet<Component>(customComponents);
             foreach (var item in customComponents)
             {
                 AddData(item.name, item);
             }
             AddDataFromChildren(transform);
+        }
+
+        //删除空格，括号等非法命名
+        void ChangeGameObjectName()
+        {
+#if UNITY_EDITOR
+            foreach (Transform t in GetComponentsInChildren<Transform>())
+            {
+                t.name = t.name.Replace(" ", "").Replace("(", "").Replace(")", "");
+            }
+#endif
         }
 
         void AddDataFromChildren(Transform trans)
@@ -284,13 +292,16 @@ namespace UGUIExtend
                     else
                     {
                         object obj2 = typeObj[t];
-                        if (obj2 is List<Component>)
+                        if (obj2 is Component[])
                         {
-                            (obj2 as List<Component>).Add(component);
+                            Component[] arr = obj2 as Component[];
+                            Array.Resize<Component>(ref arr, arr.Length + 1);
+                            arr[arr.Length - 1] = component;
+                            typeObj[t] = arr;
                         }
                         else if (obj2 is Component)
                         {
-                            typeObj[t] = new List<Component>() { obj2 as Component, component };
+                            typeObj[t] = new Component[] { obj2 as Component, component };
                         }
                     }
                 }
@@ -298,7 +309,12 @@ namespace UGUIExtend
         }
 
 #if UNITY_EDITOR
-        //确保RefreshDatas在保存时可以被执行
+        //void OnTransformChildrenChanged()
+        //{
+        //    RefreshDatas();
+        //    UnityEditor.EditorUtility.SetDirty(this);
+        //}
+        //确保RefreshDatas在保存时一定被执行
         [UnityEditor.InitializeOnLoadMethod]
         static void StartInitializeOnLoadMethod()
         {
@@ -307,9 +323,10 @@ namespace UGUIExtend
 
         static void ApplyHandler(GameObject go)
         {
-            UIPackage pack = go.GetComponent<UIPackage>();
-            if (pack != null)
+            foreach (var pack in go.GetComponentsInChildren<UIPackage>())
+            {
                 pack.RefreshDatas();
+            }
         }
 #endif
         #endregion
@@ -324,10 +341,7 @@ namespace UGUIExtend
             foreach (FieldInfo fi in T.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
             {
                 object value = GetUI(fi);
-                if (value != null)
-                {
-                    fi.SetValue(target, value);
-                }
+                fi.SetValue(target, value);
             }
             foreach (MethodInfo fi in T.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
             {
@@ -354,18 +368,29 @@ namespace UGUIExtend
                 else
                 {
                     string name = attr.name != null ? attr.name : info.Name;
-                    if (info.DeclaringType is IEnumerable)
+                    Type fieldType = info is FieldInfo ? (info as FieldInfo).FieldType : null;
+                    if (fieldType.IsArray)
                     {
-                        result = GetAll(name, GetGenericType(info.DeclaringType));
+                        Type elementType = fieldType.GetElementType();
+                        Component[] components = GetAll(name, elementType);
+                        if (components != null)
+                        {
+                            Array resultList = Array.CreateInstance(elementType, components.Length);
+                            for (int i = 0, c = components.Length; i < c; i++)
+                            {
+                                resultList.SetValue(components[i], i);
+                            }
+                            result = resultList;
+                        }
                     }
                     else if (attr.index != -1)
                     {
-                        List<Component> components = GetAll(name, GetGenericType(info.DeclaringType));
-                        result = attr.index < components.Count ? components[attr.index] : null;
+                        Component[] components = GetAll(name, fieldType);
+                        result = attr.index < components.Length ? components[attr.index] : null;
                     }
                     else
                     {
-                        result = Get(name, info.DeclaringType);
+                        result = Get(name, fieldType);
                     }
                 }
 
@@ -384,6 +409,21 @@ namespace UGUIExtend
         }
 
         #endregion
+    }
+
+    public sealed class UIAttribute : Attribute
+    {
+        public string name;
+        public int index = -1;
+        public bool warn = true;
+
+        public bool findByName;
+        public bool findInactive;
+
+        public UIAttribute(string name = null)
+        {
+            this.name = name;
+        }
     }
 }
 

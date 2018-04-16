@@ -58,6 +58,9 @@ namespace UGUIExtend
 
                 foreach (var pair in package.objects)
                 {
+                    if (pair.Value == null)
+                        continue;
+
                     if (pair.Value is Component)
                     {
                         DrawCompent(pair.Value as Component);
@@ -68,6 +71,8 @@ namespace UGUIExtend
                         foreach (var pair2 in typeObj)
                         {
                             object obj2 = pair2.Value;
+                            if (obj2 == null)
+                                continue;
                             if (obj2 is Component)
                             {
                                 DrawCompent(obj2 as Component);
@@ -75,8 +80,10 @@ namespace UGUIExtend
                             else
                             {
                                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                                foreach (var item in obj2 as List<Component>)
+                                foreach (var item in obj2 as IEnumerable<Component>)
                                 {
+                                    if (item == null)
+                                        continue;
                                     DrawCompent(item);
                                 }
                                 EditorGUILayout.EndVertical();
@@ -118,9 +125,9 @@ namespace UGUIExtend
                         }
                         else
                         {
-                            foreach (var item in obj2 as List<Component>)
+                            foreach (var item in obj2 as IEnumerable<Component>)
                             {
-                                result.AppendLine("[UI]List<" + item.GetType().Name + "> " + pair.Key + ";");
+                                result.AppendLine("[UI]" + item.GetType().Name + "[] " + pair.Key + ";");
                                 break;
                             }
                         }
@@ -153,6 +160,9 @@ namespace UGUIExtend
 
         void DrawCompent(Component asset)
         {
+            if (asset == null)
+                return;
+
             GUIContent content = EditorGUIUtility.ObjectContent(asset, asset.GetType());
             content.text = GetCompentFullName(asset.transform) + " " + GetCompentValue(asset);
             GUIStyle style = new GUIStyle(GUI.skin.label) { richText = true };
