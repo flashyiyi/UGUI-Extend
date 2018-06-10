@@ -60,7 +60,7 @@ namespace UGUIExtend
             {
                 isDraging = true;
             }
-            if (isDraging && e.type == EventType.mouseUp)
+            if (isDraging && e.type == EventType.MouseUp)
             {
                 isDraging = false;
             }

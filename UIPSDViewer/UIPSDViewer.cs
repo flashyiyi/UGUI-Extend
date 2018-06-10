@@ -234,7 +234,7 @@ public class UIPSDViewer : MonoBehaviour
                 }
             }
         }
-        else if (Event.current.type == EventType.dragPerform)
+        else if (Event.current.type == EventType.DragPerform)
         {
             foreach (string path in UnityEditor.DragAndDrop.paths)
             {
