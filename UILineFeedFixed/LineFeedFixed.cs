@@ -9,7 +9,6 @@ public class LineFeedFixed : BaseMeshEffect
 {
     static readonly HashSet<char> charset = new HashSet<char>(new char[] { ',',';','.','?','!','，','。','；','?','！',')','”','’','）','》' });
     private Text textCompent;
-    public bool moveUpMode = true;
 
     protected override void OnEnable()
     {
@@ -38,7 +37,7 @@ public class LineFeedFixed : BaseMeshEffect
         for (int i = 0;i < lines.Count;i++)
         {
             var line = lines[i];
-            if (i > 0 && charset.Contains(text[line.startCharIdx]))
+            if (i > 0 && charset.Contains(text[line.startCharIdx])) //行首出现标点
             {
                 var character = characters[line.startCharIdx];
                 var preCharacter = characters[line.startCharIdx - 1];
@@ -54,7 +53,7 @@ public class LineFeedFixed : BaseMeshEffect
             {
                 var nextLine = lines[i + 1];
                 var lastCharacter = characters[nextLine.startCharIdx - 1];
-                if (lastCharacter.cursorPos.x + lastCharacter.charWidth > textCompent.rectTransform.rect.xMax)
+                if (lastCharacter.cursorPos.x + lastCharacter.charWidth > textCompent.rectTransform.rect.xMax) //行末字符超出范围
                 {
                     var nextCharacter = characters[nextLine.startCharIdx];
                     int lineEndIdx = i + 1 < lines.Count - 1 ? lines[i + 2].startCharIdx : text.Length;
