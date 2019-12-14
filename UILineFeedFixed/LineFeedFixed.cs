@@ -44,17 +44,25 @@ public class LineFeedFixed : BaseMeshEffect
                 var preCharacter = characters[line.startCharIdx - 1];
                 var preLine = lines[i - 1];
                 int lineEndIdx = i < lines.Count - 1 ? lines[i + 1].startCharIdx : text.Length;
-                if (moveUpMode)
+                MoveChars(line.startCharIdx - 1, line.startCharIdx, character.cursorPos - new Vector2(preCharacter.charWidth, 0f) - preCharacter.cursorPos);
+                MoveChars(preLine.startCharIdx, line.startCharIdx - 1, new Vector2(preCharacter.charWidth, 0) * alignment);
+                MoveChars(line.startCharIdx - 1, lineEndIdx, new Vector2(preCharacter.charWidth * (1 - alignment.x), 0));
+                line.startCharIdx--;
+                lines[i] = line;
+            }
+            if (i < lines.Count - 1)
+            {
+                var nextLine = lines[i + 1];
+                var lastCharacter = characters[nextLine.startCharIdx - 1];
+                if (lastCharacter.cursorPos.x + lastCharacter.charWidth > textCompent.rectTransform.rect.xMax)
                 {
-                    MoveChars(line.startCharIdx, line.startCharIdx + 1, preCharacter.cursorPos + new Vector2(character.charWidth, 0f) - character.cursorPos);
-                    MoveChars(preLine.startCharIdx, line.startCharIdx + 1, new Vector2(-character.charWidth, 0) * alignment);
-                    MoveChars(line.startCharIdx + 1, lineEndIdx, new Vector2(-character.charWidth * (1 - alignment.x), 0));
-                }
-                else
-                {
-                    MoveChars(line.startCharIdx - 1, line.startCharIdx, character.cursorPos - new Vector2(preCharacter.charWidth, 0f) - preCharacter.cursorPos);
-                    MoveChars(preLine.startCharIdx, line.startCharIdx - 1, new Vector2(preCharacter.charWidth, 0) * alignment);
-                    MoveChars(line.startCharIdx - 1, lineEndIdx, new Vector2(preCharacter.charWidth * (1 - alignment.x), 0));
+                    var nextCharacter = characters[nextLine.startCharIdx];
+                    int lineEndIdx = i + 1 < lines.Count - 1 ? lines[i + 2].startCharIdx : text.Length;
+                    MoveChars(nextLine.startCharIdx - 1, nextLine.startCharIdx, nextCharacter.cursorPos - new Vector2(lastCharacter.charWidth, 0f) - lastCharacter.cursorPos);
+                    MoveChars(line.startCharIdx, nextLine.startCharIdx - 1, new Vector2(lastCharacter.charWidth, 0) * alignment);
+                    MoveChars(nextLine.startCharIdx - 1, lineEndIdx, new Vector2(lastCharacter.charWidth * (1 - alignment.x), 0));
+                    nextLine.startCharIdx--;
+                    lines[i + 1] = nextLine;
                 }
             }
         }
