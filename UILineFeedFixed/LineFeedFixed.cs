@@ -63,10 +63,14 @@ public class LineFeedFixed : BaseMeshEffect
         vh.AddUIVertexTriangleStream(output);
     }
 
-    void MoveChars(int start,int end, Vector3 offest)
+    void MoveChars(int start,int end, Vector2 offest)
     {
         for (int index = start; index < end; index++)
         {
+            UICharInfo charInfo = characters[index];
+            charInfo.cursorPos += offest;
+            characters[index] = charInfo;
+
             int i = index * 6;
             UIVertex v1 = output[i];
             UIVertex v2 = output[i + 1];
@@ -75,12 +79,12 @@ public class LineFeedFixed : BaseMeshEffect
             UIVertex v5 = output[i + 4];
             UIVertex v6 = output[i + 5];
 
-            v1.position += offest;
-            v2.position += offest;
-            v3.position += offest;
-            v4.position += offest;
-            v5.position += offest;
-            v6.position += offest;
+            v1.position += (Vector3)offest;
+            v2.position += (Vector3)offest;
+            v3.position += (Vector3)offest;
+            v4.position += (Vector3)offest;
+            v5.position += (Vector3)offest;
+            v6.position += (Vector3)offest;
 
             output[i] = v1;
             output[i + 1] = v2;
